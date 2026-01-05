@@ -507,16 +507,32 @@ def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argpar
         max_suffix_parts=args.max_suffix_parts,
         max_constraints=args.max_constraints,
     )
+    
+    def set_fallback_reason(reason: str) -> None:
+        stats.setdefault("fallback_reason", reason)
 
     caveats: List[str] = []
+    
+    if len(universe) == 0:
+        caveats.append("version_universe is empty")
+        set_fallback_reason("empty_universe")
+    elif len(universe) == 1:
+        caveats.append("version_universe has only 1 version")
+        set_fallback_reason("single_version_universe")
     if len(universe) < 2:
         caveats.append("version_universe has <2 versions")
+        set_fallback_reason("small_universe")
+        
     if stats["calls_total"] < args.min_calls:
         caveats.append(f"too few calls: {stats['calls_total']} < min_calls={args.min_calls}")
+        set_fallback_reason("gate_calls_total")
+        
     if stats["constraints_emitted"] < args.min_constraints:
         caveats.append(f"too few constraints: {stats['constraints_emitted']} < min_constraints={args.min_constraints}")
+        set_fallback_reason("gate_constraints")
 
     if caveats:
+        stats.setdefault("fallback_reason", "unknown")
         if len(universe) >= 2:
             span = SpanResult(
                 package=package,
@@ -581,6 +597,7 @@ def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argpar
         if universe.index(span.min_version) > universe.index(span.max_version):
             span.caveats.append("inconsistent bounds (min>max); dropped max_version")
             span.max_version = None
+            stats.setdefault("fallback_reason", "llm_inconsistency_bounds")
 
     return {"package": package, "span": span.model_dump(), "stats": stats, "version_universe": universe}
 
