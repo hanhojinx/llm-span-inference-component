@@ -613,7 +613,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--packages", default="", type=str, help="Comma-separated packages; empty => auto calls∩db")
     ap.add_argument("--max-packages", type=int, default=0)
 
-    ap.add_argument("--min-calls", type=int, default=25)
+    ap.add_argument("--min-calls", type=int, default=10)
     ap.add_argument("--min-constraints", type=int, default=15)
     ap.add_argument("--max-constraints", type=int, default=250)
 
