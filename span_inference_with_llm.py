@@ -271,7 +271,7 @@ def candidates(call_qual: str, idx: Dict[str, Set[str]], max_candidates: int = 1
     seen: Set[str] = set()
     for k in range(min(5, len(parts)), 0, -1):
         suf = ".".join(parts[-k:])
-        for q in idx.get(suf, set()):
+        for q in sorted(idx.get(suf, set())):
             if q not in seen:
                 out.append(q)
                 seen.add(q)
