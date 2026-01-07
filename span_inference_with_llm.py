@@ -452,7 +452,6 @@ def call_llm_span(
         try:
             resp = client.responses.parse(
                 model=model,
-                temperature=0,
                 input=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": json.dumps(evidence_pack, ensure_ascii=False)},
