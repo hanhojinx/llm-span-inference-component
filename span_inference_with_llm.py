@@ -437,9 +437,15 @@ def call_llm_span(
         return SpanResult.model_validate_json(cache_path.read_text(encoding="utf-8"))
 
     system = (
-        "Infer the compatible version span (min_version..max_version) for ONE package. "
-        "Use only the evidence_pack. Never extrapolate outside version_universe. "
-        "If evidence is weak, output null bounds and low confidence."
+        """Rules:
+            - You MUST choose min_version and max_version from version_universe (or return null ONLY if version_universe is empty).
+            - Prefer returning a span even if it is wide.
+            - If evidence is weak, missing, or contradictory, do NOT return null bounds.
+                Instead, return the widest possible span within version_universe (typically min=first, max=last),
+                set confidence=0.0, set method="fallback_full_range", and explain why in caveats.
+            - If you can confidently narrow the span, return a narrower min/max and set confidence accordingly.
+            - Output must be valid JSON matching the provided schema.
+        """
     )
 
     for attempt in range(max_retries):
