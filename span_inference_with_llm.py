@@ -415,25 +415,29 @@ def build_constraints(
         if len(cands) > K:
             candidate_truncated_calls += 1
         
-        for sym in cands[:K]:
-            sym_av = avail.get(sym, {})
-            for kw in c.kw_names:
-                avail_lookups += 1
-                a = sym_av.get(kw)
-                if a is None:
-                    avail_missing += 1
-                    earliest, last = None, None
-                else:
-                    earliest, last = a.get("earliest"), a.get("last")
+        if len(constraints) < max_constraints:
+            for sym in cands[:K]:
+                sym_av = avail.get(sym, {})
+                for kw in c.kw_names:
+                    avail_lookups += 1
+                    a = sym_av.get(kw)
+                    if a is None:
+                        avail_missing += 1
+                        earliest, last = None, None
+                    else:
+                        earliest, last = a.get("earliest"), a.get("last")
                 
-                if earliest is not None or last is not None:
-                    informative_constraints += 1
-                else:
-                    uninformative_constraints += 1
-                
-                constraints.append(
-                    {"symbol": sym, "kw": kw, "earliest": earliest, "last": last}
-                )
+                    if earliest is not None or last is not None:
+                        informative_constraints += 1
+                    else:
+                        uninformative_constraints += 1
+                    
+                    if len(constraints) < max_constraints:
+                        constraints.append(
+                            {"symbol": sym, "kw": kw, "earliest": earliest, "last": last}
+                        )
+        else:
+            pass
         
         if len(constraints) >= max_constraints:
             break
