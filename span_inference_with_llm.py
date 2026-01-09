@@ -463,9 +463,6 @@ def build_constraints(
         else:
             pass
         
-        if len(constraints) >= max_constraints:
-            break
-        
     hist = defaultdict(int)
     for n in cand_sizes:
         hist[bucket(n)] += 1
