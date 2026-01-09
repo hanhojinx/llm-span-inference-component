@@ -28,6 +28,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import statistics
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -368,29 +369,105 @@ def build_constraints(
     constraints: List[Dict[str, Any]] = []
     hits = 0
     misses = 0
+    
+    calls_without_kw = 0
+    kw_total = 0
+    kw_seen: Set[str] = set()
+    
+    cand_sizes: List[int] = list()
+    candidate_truncated_calls = 0
+    miss_qual = Counter()
+    
+    avail_lookups = 0
+    avail_missing = 0
+    informative_constraints = 0
+    uninformative_constraints = 0
+    
+    K = 3
+    
+    def bucket(n: int) -> str:
+        if n == 0: return "0"
+        if n == 1: return "1"
+        if n == 2: return "2"
+        if n == 3: return "3"
+        if n <= 5: return "4-5"
+        if n <= 10: return "6-10"
+        return "11+"
 
     for c in pkg_calls:
         if not c.kw_names:
+            calls_without_kw += 1
             continue
+        
+        kw_total += len(c.kw_names)
+        for k in c.kw_names:
+            kw_seen.add(k)
+        
         cands = candidates(c.qualname_like, suf_idx)
+        cand_sizes.append(len(cands))
+        
         if not cands:
             misses += 1
+            miss_qual[c.qualname_like] += 1
             continue
+        
         hits += 1
-        for sym in cands[:3]:
+        if len(cands) > K:
+            candidate_truncated_calls += 1
+        
+        for sym in cands[:K]:
+            sym_av = avail.get(sym, {})
             for kw in c.kw_names:
-                a = avail.get(sym, {}).get(kw, {"earliest": None, "last": None})
-                constraints.append({"symbol": sym, "kw": kw, "earliest": a.get("earliest"), "last": a.get("last")})
+                avail_lookups += 1
+                a = sym_av.get(kw)
+                if a is None:
+                    avail_missing += 1
+                    earliest, last = None, None
+                else:
+                    earliest, last = a.get("earliest"), a.get("last")
+                
+                if earliest is not None or last is not None:
+                    informative_constraints += 1
+                else:
+                    uninformative_constraints += 1
+                
+                constraints.append(
+                    {"symbol": sym, "kw": kw, "earliest": earliest, "last": last}
+                )
+        
         if len(constraints) >= max_constraints:
             break
+        
+    hist = defaultdict(int)
+    for n in cand_sizes:
+        hist[bucket(n)] += 1
 
     stats = {
+        # basic stats
         "calls_total": len(pkg_calls),
         "calls_with_kw": sum(1 for c in pkg_calls if c.kw_names),
         "mapping_hits": hits,
         "mapping_misses": misses,
         "constraints_emitted": len(constraints),
         "universe_size": len(universe),
+        
+        # kw/call property stats
+        "calls_without_kw": calls_without_kw,
+        "kw_total": kw_total,
+        "kw_unique": len(kw_seen),
+
+        # candidate matching quality stats
+        "candidate_bucket_hist": dict(hist),
+        "max_candidates": max(cand_sizes) if cand_sizes else 0,
+        "avg_candidates": (statistics.mean(cand_sizes) if cand_sizes else 0.0),
+        "candidate_truncated_calls": candidate_truncated_calls,
+        "top_missing_qualnames": miss_qual.most_common(10),
+
+        # constraint info stats
+        "avail_lookups": avail_lookups,
+        "avail_missing": avail_missing,
+        "informative_constraints": informative_constraints,
+        "uninformative_constraints": uninformative_constraints,
     }
     return constraints, stats
 
