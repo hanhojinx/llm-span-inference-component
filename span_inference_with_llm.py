@@ -614,9 +614,11 @@ def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argpar
         caveats.append(f"too few calls: {stats['calls_total']} < min_calls={args.min_calls}")
         set_fallback_reason("gate_calls_total")
         
-    if stats["constraints_emitted"] < args.min_constraints:
-        caveats.append(f"too few constraints: {stats['constraints_emitted']} < min_constraints={args.min_constraints}")
-        set_fallback_reason("gate_constraints")
+    if stats["informative_constraints"] < args.min_constraints:
+        caveats.append(f"too few informative constraints: {stats['informative_constraints']} < "
+                       f"min_constraints={args.min_constraints} (total emitted: {stats['constraints_emitted']})"
+                       )
+        set_fallback_reason("gate_informative_constraints")
 
     if caveats:
         stats.setdefault("fallback_reason", "unknown")
