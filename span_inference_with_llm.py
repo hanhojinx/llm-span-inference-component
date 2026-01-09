@@ -300,6 +300,16 @@ def build_kw_availability(universe: List[str], events: List[Event]) -> Dict[str,
     for e in sorted(events, key=ekey):
         if not e.qualname:
             continue
+        sym = e.qualname
+        
+        # symbol level lifecycle record
+        if e.change == "added":
+            if avail[sym]["@symbol"]["earliest"] is None:
+                avail[sym]["@symbol"]["earliest"] = e.version
+        elif e.change == "removed":
+            pv = prev_version(universe, e.version)
+            avail[sym]["@symbol"]["last"] = pv
+        
         p = param_delta(e)
         if not p:
             continue
@@ -418,6 +428,20 @@ def build_constraints(
         if len(constraints) < max_constraints:
             for sym in cands[:K]:
                 sym_av = avail.get(sym, {})
+                sym_lifecycle = sym_av.get("@symbol")
+                if sym_lifecycle:
+                    avail_lookups += 1
+                    e_sym, l_sym = sym_lifecycle.get("earliest"), sym_lifecycle.get("last")
+                    
+                    if e_sym is not None or l_sym is not None:
+                        informative_constraints += 1
+                    else:
+                        uninformative_constraints += 1
+                    
+                    if len(constraints) < max_constraints:
+                        constraints.append(
+                            {"symbol": sym, "kw": None, "earliest": e_sym, "last": l_sym}
+                        )
                 for kw in c.kw_names:
                     avail_lookups += 1
                     a = sym_av.get(kw)
