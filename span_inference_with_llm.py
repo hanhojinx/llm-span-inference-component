@@ -381,6 +381,7 @@ def build_constraints(
     
     hits = 0
     misses = 0
+    import_hits = 0
     calls_without_kw = 0
     kw_total = 0
     kw_seen: Set[str] = set()
@@ -402,54 +403,71 @@ def build_constraints(
         return "11+"
 
     for c in pkg_calls:
-        if not c.kw_names:
+        if c.kw_names:
+            kw_total += len(c.kw_names)
+            for k in c.kw_names:
+                kw_seen.add(k)
+        else:
             calls_without_kw += 1
-            continue
-        
-        kw_total += len(c.kw_names)
-        for k in c.kw_names:
-            kw_seen.add(k)
         
         cands = candidates(c.qualname_like, suf_idx)
         cand_sizes.append(len(cands))
         
-        if not cands:
-            misses += 1
-            miss_qual[c.qualname_like] += 1
-            continue
+        if cands:
+            hits += 1
+            if len(cands) > K:
+                candidate_truncated_calls += 1
         
-        hits += 1
-        if len(cands) > K:
-            candidate_truncated_calls += 1
-        
-        for sym in cands[:K]:
-            sym_av = avail.get(sym, {})
-            sym_lifecycle = sym_av.get("@symbol")
-            if sym_lifecycle:
-                avail_lookups += 1
-                e_sym, l_sym = sym_lifecycle.get("earliest"), sym_lifecycle.get("last")
-                
-                item = {"symbol": sym, "kw": None, "earliest": e_sym, "last": l_sym}
-                if e_sym is not None or l_sym is not None:
-                    informative_pool.append(item)
-                else:
-                    uninformative_pool.append(item)
+            for sym in cands[:K]:
+                sym_av = avail.get(sym, {})
+                sym_lifecycle = sym_av.get("@symbol")
+                if sym_lifecycle:
+                    avail_lookups += 1
+                    e_sym, l_sym = sym_lifecycle.get("earliest"), sym_lifecycle.get("last")
+                    item = {"symbol": sym, "kw": None, "earliest": e_sym, "last": l_sym, "note": "symbol_existence"}
+                    if e_sym is not None or l_sym is not None:
+                        informative_pool.append(item)
+                    else:
+                        uninformative_pool.append(item)
                     
-            for kw in c.kw_names:
-                avail_lookups += 1
-                a = sym_av.get(kw)
-                if a is None:
-                    avail_missing += 1
-                    e_kw, l_kw = None, None
-                else:
-                    e_kw, l_kw = a.get("earliest"), a.get("last")
+                for kw in c.kw_names:
+                    avail_lookups += 1
+                    a = sym_av.get(kw)
+                    e_kw, l_kw = (a.get("earliest"), a.get("last")) if a else (None, None)
+                    if a is None:   avail_missing += 1
                 
                 item = {"symbol": sym, "kw": kw, "earliest": e_kw, "last": l_kw}
                 if e_kw is not None or l_kw is not None:
                     informative_pool.append(item)
                 else:
                     uninformative_pool.append(item)
-                    
+    
+        else:
+            misses += 1
+            found_import_mod = False
+            parts = split_qual(c.qualname_like)
+            
+            for i in range(len(parts) - 1, 0, -1):
+                mod_path = ".".join(parts[:i])
+                if mod_path in avail:
+                    mod_lifecycle = avail[mod_path].get("@symbol")
+                    if mod_lifecycle:
+                        avail_lookups += 1
+                        e_mod, l_mod = mod_lifecycle.get("earliest"), mod_lifecycle.get("last")
+                        item = {"symbol": mod_path, "kw": None, "earliest": e_mod, "last": l_mod, "note": "import_existence"}
+                        
+                        if e_mod is not None or l_mod is not None:
+                            informative_pool.append(item)
+                            import_hits += 1
+                            found_import_mod = True
+                        else:
+                            uninformative_pool.append(item)
+                        
+                        if found_import_mod:    break
+            
+            if not found_import_mod:
+                miss_qual[c.qualname_like] += 1
+    
     final_constraints = []
     
     if len(informative_pool) <= max_constraints:
@@ -463,30 +481,26 @@ def build_constraints(
     
     remaining_slots = max_constraints - len(final_constraints)
     if remaining_slots > 0 and uninformative_pool:
-        if len(uninformative_pool) <= remaining_slots:
-            final_constraints.extend(uninformative_pool)
-        else:
-            step = len(uninformative_pool) / remaining_slots
-            for i in range(remaining_slots):
-                idx = int(i * step)
-                if idx < len(uninformative_pool):
-                    final_constraints.append(uninformative_pool[idx])
+        step = len(uninformative_pool) / remaining_slots
+        for i in range(remaining_slots):
+            idx = int(i * step)
+            if idx < len(uninformative_pool):
+                final_constraints.append(uninformative_pool[idx])
     
     hist = defaultdict(int)
-    for n in cand_sizes:
-        hist[bucket(n)] += 1
+    for n in cand_sizes:    hist[bucket(n)] += 1
 
     stats = {
         # basic stats
         "calls_total": len(pkg_calls),
-        "calls_with_kw": sum(1 for c in pkg_calls if c.kw_names),
+        "calls_with_kw": len(pkg_calls) - calls_without_kw,
         "mapping_hits": hits,
         "mapping_misses": misses,
+        "import_existence_hits": import_hits,
         "constraints_emitted": len(final_constraints),
         "universe_size": len(universe),
         
         # kw/call property stats
-        "calls_without_kw": calls_without_kw,
         "kw_total": kw_total,
         "kw_unique": len(kw_seen),
 
