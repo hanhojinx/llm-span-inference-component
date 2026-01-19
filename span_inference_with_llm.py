@@ -375,23 +375,20 @@ def build_constraints(
     qualnames = [e.qualname for e in events if e.qualname]
     suf_idx = build_suffix_index(qualnames, max_suffix_parts=max_suffix_parts)
     avail = build_kw_availability(universe, events)
-
-    constraints: List[Dict[str, Any]] = []
+    
+    informative_pool = []
+    uninformative_pool = []
+    
     hits = 0
     misses = 0
-    
     calls_without_kw = 0
     kw_total = 0
     kw_seen: Set[str] = set()
-    
     cand_sizes: List[int] = list()
     candidate_truncated_calls = 0
     miss_qual = Counter()
-    
     avail_lookups = 0
     avail_missing = 0
-    informative_constraints = 0
-    uninformative_constraints = 0
     
     K = 3
     
@@ -431,35 +428,50 @@ def build_constraints(
             if sym_lifecycle:
                 avail_lookups += 1
                 e_sym, l_sym = sym_lifecycle.get("earliest"), sym_lifecycle.get("last")
-                    
+                
+                item = {"symbol": sym, "kw": None, "earliest": e_sym, "last": l_sym}
                 if e_sym is not None or l_sym is not None:
-                    informative_constraints += 1
+                    informative_pool.append(item)
                 else:
-                    uninformative_constraints += 1
+                    uninformative_pool.append(item)
                     
-                if len(constraints) < max_constraints:
-                    constraints.append(
-                        {"symbol": sym, "kw": None, "earliest": e_sym, "last": l_sym}
-                    )
             for kw in c.kw_names:
                 avail_lookups += 1
                 a = sym_av.get(kw)
                 if a is None:
                     avail_missing += 1
-                    earliest, last = None, None
+                    e_kw, l_kw = None, None
                 else:
-                    earliest, last = a.get("earliest"), a.get("last")
+                    e_kw, l_kw = a.get("earliest"), a.get("last")
                 
-                if earliest is not None or last is not None:
-                    informative_constraints += 1
+                item = {"symbol": sym, "kw": kw, "earliest": e_kw, "last": l_kw}
+                if e_kw is not None or l_kw is not None:
+                    informative_pool.append(item)
                 else:
-                    uninformative_constraints += 1
+                    uninformative_pool.append(item)
                     
-                if len(constraints) < max_constraints:
-                    constraints.append(
-                        {"symbol": sym, "kw": kw, "earliest": earliest, "last": last}
-                    )
-        
+    final_constraints = []
+    
+    if len(informative_pool) <= max_constraints:
+        final_constraints.extend(informative_pool)
+    else:
+        step = len(informative_pool) / max_constraints
+        for i in range(max_constraints):
+            idx = int(i * step)
+            if idx < len(informative_pool):
+                final_constraints.append(informative_pool[idx])
+    
+    remaining_slots = max_constraints - len(final_constraints)
+    if remaining_slots > 0 and uninformative_pool:
+        if len(uninformative_pool) <= remaining_slots:
+            final_constraints.extend(uninformative_pool)
+        else:
+            step = len(uninformative_pool) / remaining_slots
+            for i in range(remaining_slots):
+                idx = int(i * step)
+                if idx < len(uninformative_pool):
+                    final_constraints.append(uninformative_pool[idx])
+    
     hist = defaultdict(int)
     for n in cand_sizes:
         hist[bucket(n)] += 1
@@ -470,7 +482,7 @@ def build_constraints(
         "calls_with_kw": sum(1 for c in pkg_calls if c.kw_names),
         "mapping_hits": hits,
         "mapping_misses": misses,
-        "constraints_emitted": len(constraints),
+        "constraints_emitted": len(final_constraints),
         "universe_size": len(universe),
         
         # kw/call property stats
@@ -488,10 +500,10 @@ def build_constraints(
         # constraint info stats
         "avail_lookups": avail_lookups,
         "avail_missing": avail_missing,
-        "informative_constraints": informative_constraints,
-        "uninformative_constraints": uninformative_constraints,
+        "informative_constraints": len(informative_pool),
+        "uninformative_constraints": len(uninformative_pool),
     }
-    return constraints, stats
+    return final_constraints, stats
 
 
 def select_relevant_events(events: List[Event], constraints: List[Dict[str, Any]], max_events: int) -> List[Dict[str, Any]]:
