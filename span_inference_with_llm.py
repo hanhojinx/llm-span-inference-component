@@ -436,11 +436,11 @@ def build_constraints(
                     e_kw, l_kw = (a.get("earliest"), a.get("last")) if a else (None, None)
                     if a is None:   avail_missing += 1
                 
-                item = {"symbol": sym, "kw": kw, "earliest": e_kw, "last": l_kw}
-                if e_kw is not None or l_kw is not None:
-                    informative_pool.append(item)
-                else:
-                    uninformative_pool.append(item)
+                    item = {"symbol": sym, "kw": kw, "earliest": e_kw, "last": l_kw}
+                    if e_kw is not None or l_kw is not None:
+                        informative_pool.append(item)
+                    else:
+                        uninformative_pool.append(item)
     
         else:
             misses += 1
