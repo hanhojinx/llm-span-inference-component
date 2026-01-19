@@ -625,6 +625,8 @@ def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argpar
         max_constraints=args.max_constraints,
     )
     
+    stats["llm_called"] = False
+    
     def set_fallback_reason(reason: str) -> None:
         stats.setdefault("fallback_reason", reason)
 
@@ -690,7 +692,8 @@ def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argpar
 
     if OpenAI is None:
         raise RuntimeError("openai SDK not available. pip install openai")
-
+    
+    stats["llm_called"] = True
     client = OpenAI()
     span = call_llm_span(
         client=client,
