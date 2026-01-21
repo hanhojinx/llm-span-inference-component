@@ -619,6 +619,19 @@ def clamp_to_universe(universe: List[str], v: Optional[str], kind: str) -> Tuple
     return None, f"{kind} below universe; dropped"
 
 
+def get_dynamic_max_constraints(informative_count: int, default_max: int) -> int:
+    """
+    informative_constraints 개수에 따라서 max_constraints 제한을 동적으로 조정함
+    """
+    if informative_count > 2000:
+        return 800
+    if informative_count > 1000:
+        return 500
+    if informative_count > 500:
+        return 350
+    return default_max
+
+
 def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argparse.Namespace) -> Dict[str, Any]:
     """
     pkg 1개 대상으로 end-to-end:
@@ -638,6 +651,22 @@ def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argpar
         max_suffix_parts=args.max_suffix_parts,
         max_constraints=args.max_constraints,
     )
+    
+    dynamic_limit = get_dynamic_max_constraints(stats["informative_constraints"], args.max_constraints)
+    
+    if dynamic_limit > args.max_constraints:
+        constraints, stats = build_constraints(
+            universe=universe,
+            pkg_calls=pkg_calls,
+            events=events,
+            max_suffix_parts=args.max_suffix_parts,
+            max_constraints=dynamic_limit
+        )
+        stats["dynamic_limit_applied"] = True
+        stats["final_max_constraints"] = dynamic_limit
+    else:
+        stats["dynamic_limit_applied"] = False
+        stats["final_max_constraints"] = args.max_constraints
     
     stats["llm_called"] = False
     
