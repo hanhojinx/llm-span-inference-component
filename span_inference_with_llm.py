@@ -570,6 +570,7 @@ def call_llm_span(
                 set confidence=0.0, set method="fallback_full_range", and explain why in caveats.
             - If you can confidently narrow the span, return a narrower min/max and set confidence accordingly.
             - Output must be valid JSON matching the provided schema.
+            - If you choose 'fallback_full_range', you MUST specify which symbols or versions caused the conflict in the 'caveats' field.
         """
     )
 
