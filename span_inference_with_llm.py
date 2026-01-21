@@ -623,7 +623,7 @@ def get_dynamic_max_constraints(informative_count: int, default_max: int) -> int
     """
     informative_constraints 개수에 따라서 max_constraints 제한을 동적으로 조정함
     """
-    if informative_count > 2000:
+    if informative_count > 1500:
         return 800
     if informative_count > 1000:
         return 500
