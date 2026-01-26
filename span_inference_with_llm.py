@@ -575,23 +575,18 @@ def call_llm_span(
             
             ### CONFLICT SENSITIVITY CHECK (Execute ONLY when triggering 'fallback_full_range'):
             Before finalizing a "fallback_full_range" decision, you MUST perform a "False Positive Test" on the contradictory evidence:
-            1. **Identify the Culprits**: List the specific symbol constraints that are conflicting (e.g., Symbol A Max < Symbol B Min).
-            2. **Classify Symbols**:
-                - **Type A (Public)**: Documented, official APIs (e.g., `numpy.int`, `scipy.interpolate.interp2d`).
-                - **Type B (Internal)**: Symbols starting with `_` or residing in private modules (e.g., `numpy._core`, `torch._inductor`, `array_api._elementwise`).
-            3. **Re-evaluate**:
-                - **Scenario 1: Public vs. Public (True Deadlock)**
-                    If the conflict is strictly between Type A symbols (e.g., A Removed vs. A Introduced), CONFIRM the `fallback_full_range`.
-                    -> Set caveats: "DEADLOCK: Public API [Symbol] (Removed vX) conflicts with [Symbol] (Min vY)."
-                - **Scenario 2: Internal Involvement (Potential Noise)**
-                    If the conflict is caused by a Type B (Internal) symbol, IGNORE that specific internal constraint.
-                    -> **RETRY** span inference using only the remaining Public symbols.
-                    -> If a valid span is found after ignoring the internal symbol, RETURN that span instead of falling back.
-                        Set confidence to low-medium (e.g., 0.3 ~ 0.5) and note in caveats: "Ignored internal symbol conflict ([Symbol]) to derive span.
+            1. **Clarify between two cases**:
+                - **Case A**: There are too few information, not enough to output a version span.
+                - **Case B**: All other cases except case A.
+            2. **Case A Handling**:
+                - Change 'fallback_full_range' to 'not_enough_evidence'.
+            3. **Case B Handling**:
+                - If there are too many intertwined evidences, just return 'fallback_full_range' and mention the detailed case report in 'caveats'.
+                - If there are more than one certain version/symbol/dependency conflicts, return 'possible_conflict_case_detected'.
             4. **Final Step**
                 - This step is only activated when the package is decided to be "fallback_full_range".
-                    - **Case 1:** When there is a Hard Deadlock, set the confidence to "-1.0".
-                    - **Case 2:** When the reason is data insufficiency, keep the confidence as "0.0".
+                    - **Case 1:** When 'possible_conflict_case_detected' is returned, set the confidence to "-1.0".
+                    - **Case 2:** When 'not_enough_evidence' is returned, keep the confidence as "0.0".
         """
     )
 
