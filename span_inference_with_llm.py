@@ -570,6 +570,7 @@ def call_llm_span(
                 Instead, return the widest possible span within version_universe (typically min=first, max=last),
                 set confidence=0.0, set method="fallback_full_range", and explain why in caveats.
             - If you can confidently narrow the span, return a narrower min/max and set confidence accordingly.
+            - If there is only lower bound, just consider the upper bound as the most recent version. This is not a reason of considering the case as "fallback_full_range".
             - Output must be valid JSON matching the provided schema.
             - If you choose 'fallback_full_range', you MUST specify which symbols or versions caused the conflict in the 'caveats' field.
             
