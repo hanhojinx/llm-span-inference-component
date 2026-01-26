@@ -565,12 +565,23 @@ def call_llm_span(
         """Rules:
             - You MUST choose min_version and max_version from version_universe (or return null ONLY if version_universe is empty).
             - Prefer returning a span even if it is wide.
-            - If evidence is weak, missing, or contradictory, do NOT return null bounds.
-                Instead, return the widest possible span within version_universe (typically min=first, max=last),
-                set confidence=0.0, set method="fallback_full_range", and explain why in caveats.
-            - If you can confidently narrow the span, return a narrower min/max and set confidence accordingly.
+
+            ### Conflict Detection & Diagnosis (New Priority):
+            - BEFORE calculating the span, check if there is a "Logical Deadlock" or "Empty Intersection" between symbols.
+            - If Symbol A requires versions < X (e.g., it was removed in X) and Symbol B requires versions > Y (e.g., it was introduced in Y), and X <= Y:
+                1. Set confidence=0.0.
+                2. Set method="logical_conflict".
+                3. Return the widest possible span (fallback to full universe).
+                4. In 'caveats', you MUST explicitly name the conflicting pair: "CONFLICT: [Symbol A] (max: X) is incompatible with [Symbol B] (min: Y)".
+
+            ### Fallback & Confidence:
+            - If evidence is weak or missing (but not necessarily contradictory), use method="fallback_full_range" and set confidence=0.0.
+            - If you find a direct contradiction (Logical Deadlock), use method="logical_conflict" as specified above.
+            - If you can confidently narrow the span without contradictions, return a narrower min/max and set confidence accordingly.
+
+            ### Output Requirements:
             - Output must be valid JSON matching the provided schema.
-            - If you choose 'fallback_full_range', you MUST specify which symbols or versions caused the conflict in the 'caveats' field.
+            - Every 'fallback_full_range' or 'logical_conflict' result MUST specify the exact symbols, versions, or lifecycle events that caused the range to widen or fail.
         """
     )
 
