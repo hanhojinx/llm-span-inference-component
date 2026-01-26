@@ -573,6 +573,16 @@ def call_llm_span(
             - Output must be valid JSON matching the provided schema.
             - If you choose 'fallback_full_range', you MUST specify which symbols or versions caused the conflict in the 'caveats' field.
             
+            ### EXCEPTION PROTOCOL: NAMESPACE MIGRATION (Execute BEFORE determining fallback)
+            If you detect a conflict that looks like a "Module Rename" or "Move" (e.g., `starlette.response` vs `starlette.responses`, `sklearn.grid_search` vs `sklearn.model_selection`):
+            1. **INTERPRETATION**: Treat conflicting paths as a conditional import (`try-except`), meaning the code supports BOTH versions (OR logic), not neither.
+            2. **ACTION**:
+                - DISCARD the constraint for the Old/Legacy path.
+                - PRIORITIZE the Modern path to determine the span.
+                - Return the narrowed span based on the Modern path.
+                - Set confidence as you judge.
+                - Do NOT proceed to 'fallback_full_range' or the 'CONFLICT SENSITIVITY CHECK' below.
+            
             ### CONFLICT SENSITIVITY CHECK (Execute ONLY when triggering 'fallback_full_range'):
             Before finalizing a "fallback_full_range" decision, you MUST perform a "False Positive Test" on the contradictory evidence:
             1. **Clarify between two cases**:
