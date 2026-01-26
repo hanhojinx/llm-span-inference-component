@@ -563,25 +563,30 @@ def call_llm_span(
 
     system = (
         """Rules:
-            - You MUST choose min_version and max_version from version_universe.
-            - PRIMARY GOAL: Find the most likely compatible span. If the symbols are consistent and stable across versions, you SHOULD return a high confidence (0.8~1.0).
+            ### Step 1: Individual Symbol Constraint Analysis (CRITICAL)
+            - For EACH symbol provided in the evidence, determine its valid version range [min_exists, max_exists].
+            - If a symbol was "Added" in version X, its constraint is [X, latest].
+            - If a symbol was "Removed" in version Y, its constraint is [earliest, Y-1].
+            - If a symbol has always existed, its constraint is [earliest, latest].
 
-            ### Conflict Detection (Strict Criteria):
-            - ONLY trigger a "logical_conflict" if there is an EXPLICIT, PROVABLE contradiction. 
-            - A contradiction is defined as: Symbol A was REMOVED in version X, but is used alongside Symbol B which only EXISTS in version Y, where X < Y.
-            - If you find such a hard deadlock:
-                1. Set confidence=0.0 and method="logical_conflict".
-                2. In 'caveats', name the specific conflicting symbols and their version boundaries.
+            ### Step 2: Global Intersection Check
+            - Calculate the intersection of ALL individual symbol constraints.
+            - If the intersection is EMPTY (e.g., Symbol A requires < 1.24 but Symbol B requires >= 2.0.0):
+                1. This is a "Hard Conflict". You MUST NOT ignore this.
+                2. Set confidence=0.0 and method="logical_conflict".
+                3. Return the widest possible span (full universe).
+                4. In 'caveats', explicitly state: "DEADLOCK: [Symbol A] (Max: 1.23.9) and [Symbol B] (Min: 2.0.0) are mutually exclusive."
+                5. STOP HERE and output the result.
 
-            ### Normal Inference (Standard Mode):
-            - If there is NO explicit deadlock, proceed with normal inference.
-            - Do NOT lower confidence just because the version range is wide. 
-            - If symbols like 'BaseModel' (Pydantic) or 'Field' have been stable for a long time, and the code uses them in a standard way, maintain HIGH confidence for that stable range.
-            - Use "fallback_full_range" (conf=0.0) ONLY when you have almost zero evidence, not when you have stable but wide evidence.
+            ### Step 3: Normal Inference (Only if No Conflict)
+            - If the intersection is NOT empty, find the most likely compatible span.
+            - If all symbols are perfectly valid within the chosen span, you may return high confidence (0.8~1.0).
+            - Even if the span is wide, as long as it is CONSISTENT with all symbol lifecycles, maintain a reasonable confidence.
 
-            ### Output:
-            - Return valid JSON.
-            - 'caveats' should be brief. For 'logical_conflict', be specific about the "X vs Y" version mismatch.
+            ### Strict Constraints:
+            - Never "ignore" a Removal event to force a span.
+            - Usage of a 'Removed' symbol in a version where it doesn't exist MUST result in 0.0 confidence.
+            - Output must be valid JSON matching the schema.
         """
     )
 
