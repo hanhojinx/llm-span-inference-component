@@ -589,12 +589,12 @@ def call_llm_span(
                 - **Case A**: There are too few information, not enough to output a version span.
                 - **Case B**: All other cases except case A.
             2. **Case A Handling**:
-                - Change 'fallback_full_range' to 'not_enough_evidence'.
+                - Change 'fallback_full_range' to 'not_enough_evidence' and return 'not_enough_evidence'.
             3. **Case B Handling**:
                 - If there are too many intertwined evidences, just return 'fallback_full_range' and mention the detailed case report in 'caveats'.
                 - If there are more than one certain version/symbol/dependency conflicts, return 'possible_conflict_case_detected'.
             4. **Final Step**
-                - This step is only activated when the package is decided to be "fallback_full_range".
+                - This step is only activated when the package is decided to be Case A or Case B.
                     - **Case 1:** When 'possible_conflict_case_detected' is returned, set the confidence to "-1.0".
                     - **Case 2:** When 'not_enough_evidence' is returned, keep the confidence as "0.0".
         """
