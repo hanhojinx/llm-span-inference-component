@@ -665,6 +665,33 @@ def run_one(package: str, pkg_dir: Path, pkg_calls: List[NormCall], args: argpar
     """
     events, versions_from_events = load_events(pkg_dir)
     universe = discover_universe(pkg_dir, versions_from_events)
+    
+    if not pkg_calls:
+        if universe:
+            min_v = universe[0]
+            max_v = universe[-1]
+            caveat_msg = "No API usage detected. Defaulting to full available version range."
+        else:
+            min_v = None
+            max_v = None
+            caveat_msg = "No API usage detected AND no version history found."
+        
+        return {
+            "package": package,
+            "span": {
+                "min_version": min_v,
+                "max_version": max_v,
+                "confidence": 0.0,
+                "method": "full_range_no_evidence",
+                "caveats": [caveat_msg]
+            },
+            "stats": {
+                "calls_total": 0,
+                "llm_called": False,
+                "fallback_reason": "no_calls_detected"
+            },
+            "version_universe": universe
+            }
 
     constraints, stats = build_constraints(
         universe=universe,
@@ -830,9 +857,12 @@ def main() -> None:
     if args.packages.strip():
         pkgs = [p.strip() for p in args.packages.split(",") if p.strip() and p.strip() in db_pkgs]
     else:
-        observed = [(p, len(calls_by_pkg.get(p, []))) for p in calls_by_pkg.keys() if p in db_pkgs]
-        observed.sort(key=lambda x: x[1], reverse=True)
-        pkgs = [p for p, _ in observed]
+        all_candidate_pkgs = list(db_pkgs)
+        def sort_key(p):
+            count = len(calls_by_pkg.get(p, []))
+            return (-count, p)
+        all_candidate_pkgs.sort(key=sort_key)
+        pkgs = all_candidate_pkgs
 
     if args.max_packages and args.max_packages > 0:
         pkgs = pkgs[: args.max_packages]
