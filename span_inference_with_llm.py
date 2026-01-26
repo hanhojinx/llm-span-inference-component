@@ -563,30 +563,35 @@ def call_llm_span(
 
     system = (
         """Rules:
-            ### Step 1: Individual Symbol Constraint Analysis (CRITICAL)
-            - For EACH symbol provided in the evidence, determine its valid version range [min_exists, max_exists].
-            - If a symbol was "Added" in version X, its constraint is [X, latest].
-            - If a symbol was "Removed" in version Y, its constraint is [earliest, Y-1].
-            - If a symbol has always existed, its constraint is [earliest, latest].
-
-            ### Step 2: Global Intersection Check
-            - Calculate the intersection of ALL individual symbol constraints.
-            - If the intersection is EMPTY (e.g., Symbol A requires < 1.24 but Symbol B requires >= 2.0.0):
-                1. This is a "Hard Conflict". You MUST NOT ignore this.
-                2. Set confidence=0.0 and method="logical_conflict".
-                3. Return the widest possible span (full universe).
-                4. In 'caveats', explicitly state: "DEADLOCK: [Symbol A] (Max: 1.23.9) and [Symbol B] (Min: 2.0.0) are mutually exclusive."
-                5. STOP HERE and output the result.
-
-            ### Step 3: Normal Inference (Only if No Conflict)
-            - If the intersection is NOT empty, find the most likely compatible span.
-            - If all symbols are perfectly valid within the chosen span, you may return high confidence (0.8~1.0).
-            - Even if the span is wide, as long as it is CONSISTENT with all symbol lifecycles, maintain a reasonable confidence.
-
-            ### Strict Constraints:
-            - Never "ignore" a Removal event to force a span.
-            - Usage of a 'Removed' symbol in a version where it doesn't exist MUST result in 0.0 confidence.
-            - Output must be valid JSON matching the schema.
+            ### PRIMARY CODE OF CONDUCT
+            - You MUST choose min_version and max_version from version_universe (or return null ONLY if version_universe is empty).
+            - Prefer returning a span even if it is wide.
+            - If evidence is weak, missing, or contradictory, do NOT return null bounds.
+                Instead, return the widest possible span within version_universe (typically min=first, max=last),
+                set confidence=0.0, set method="fallback_full_range", and explain why in caveats.
+            - If you can confidently narrow the span, return a narrower min/max and set confidence accordingly.
+            - Output must be valid JSON matching the provided schema.
+            - If you choose 'fallback_full_range', you MUST specify which symbols or versions caused the conflict in the 'caveats' field.
+            
+            ### CONFLICT SENSITIVITY CHECK (Execute ONLY when triggering 'fallback_full_range'):
+            Before finalizing a "fallback_full_range" decision, you MUST perform a "False Positive Test" on the contradictory evidence:
+            1. **Identify the Culprits**: List the specific symbol constraints that are conflicting (e.g., Symbol A Max < Symbol B Min).
+            2. **Classify Symbols**:
+                - **Type A (Public)**: Documented, official APIs (e.g., `numpy.int`, `scipy.interpolate.interp2d`).
+                - **Type B (Internal)**: Symbols starting with `_` or residing in private modules (e.g., `numpy._core`, `torch._inductor`, `array_api._elementwise`).
+            3. **Re-evaluate**:
+                - **Scenario 1: Public vs. Public (True Deadlock)**
+                    If the conflict is strictly between Type A symbols (e.g., A Removed vs. A Introduced), CONFIRM the `fallback_full_range`.
+                    -> Set caveats: "DEADLOCK: Public API [Symbol] (Removed vX) conflicts with [Symbol] (Min vY)."
+                - **Scenario 2: Internal Involvement (Potential Noise)**
+                    If the conflict is caused by a Type B (Internal) symbol, IGNORE that specific internal constraint.
+                    -> **RETRY** span inference using only the remaining Public symbols.
+                    -> If a valid span is found after ignoring the internal symbol, RETURN that span instead of falling back.
+                        Set confidence to low-medium (e.g., 0.3 ~ 0.5) and note in caveats: "Ignored internal symbol conflict ([Symbol]) to derive span.
+            4. **Final Step**
+                - This step is only activated when the package is decided to be "fallback_full_range".
+                    - **Case 1:** When there is a Hard Deadlock, set the confidence to "-1.0".
+                    - **Case 2:** When the reason is data insufficiency, keep the confidence as "0.0".
         """
     )
 
