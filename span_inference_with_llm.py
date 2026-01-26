@@ -563,25 +563,25 @@ def call_llm_span(
 
     system = (
         """Rules:
-            - You MUST choose min_version and max_version from version_universe (or return null ONLY if version_universe is empty).
-            - Prefer returning a span even if it is wide.
+            - You MUST choose min_version and max_version from version_universe.
+            - PRIMARY GOAL: Find the most likely compatible span. If the symbols are consistent and stable across versions, you SHOULD return a high confidence (0.8~1.0).
 
-            ### Conflict Detection & Diagnosis (New Priority):
-            - BEFORE calculating the span, check if there is a "Logical Deadlock" or "Empty Intersection" between symbols.
-            - If Symbol A requires versions < X (e.g., it was removed in X) and Symbol B requires versions > Y (e.g., it was introduced in Y), and X <= Y:
-                1. Set confidence=0.0.
-                2. Set method="logical_conflict".
-                3. Return the widest possible span (fallback to full universe).
-                4. In 'caveats', you MUST explicitly name the conflicting pair: "CONFLICT: [Symbol A] (max: X) is incompatible with [Symbol B] (min: Y)".
+            ### Conflict Detection (Strict Criteria):
+            - ONLY trigger a "logical_conflict" if there is an EXPLICIT, PROVABLE contradiction. 
+            - A contradiction is defined as: Symbol A was REMOVED in version X, but is used alongside Symbol B which only EXISTS in version Y, where X < Y.
+            - If you find such a hard deadlock:
+                1. Set confidence=0.0 and method="logical_conflict".
+                2. In 'caveats', name the specific conflicting symbols and their version boundaries.
 
-            ### Fallback & Confidence:
-            - If evidence is weak or missing (but not necessarily contradictory), use method="fallback_full_range" and set confidence=0.0.
-            - If you find a direct contradiction (Logical Deadlock), use method="logical_conflict" as specified above.
-            - If you can confidently narrow the span without contradictions, return a narrower min/max and set confidence accordingly.
+            ### Normal Inference (Standard Mode):
+            - If there is NO explicit deadlock, proceed with normal inference.
+            - Do NOT lower confidence just because the version range is wide. 
+            - If symbols like 'BaseModel' (Pydantic) or 'Field' have been stable for a long time, and the code uses them in a standard way, maintain HIGH confidence for that stable range.
+            - Use "fallback_full_range" (conf=0.0) ONLY when you have almost zero evidence, not when you have stable but wide evidence.
 
-            ### Output Requirements:
-            - Output must be valid JSON matching the provided schema.
-            - Every 'fallback_full_range' or 'logical_conflict' result MUST specify the exact symbols, versions, or lifecycle events that caused the range to widen or fail.
+            ### Output:
+            - Return valid JSON.
+            - 'caveats' should be brief. For 'logical_conflict', be specific about the "X vs Y" version mismatch.
         """
     )
 
