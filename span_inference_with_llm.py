@@ -15,11 +15,10 @@ using:
 - How to run:
     (env var로 OPENAI API KEY 설정 이후)
     $ python span_inference_with_llm.py \
-        --calls extracted_calls.jsonl \
-        --db-root /path/to/out \
+        --calls airflow_extracted_calls.jsonl \
+        --db-root out \
         --out llm_spans_output.jsonl \
-        --model gpt-5-nano \
-        --packages torch (optional, 패키지 따로따로 돌리고싶으면 원하는 패키지 이름만 붙일 것)
+        --pkg-list tpl_list.txt
 """
 
 from __future__ import annotations
@@ -829,6 +828,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--model", default="gpt-4o-2024-08-06", type=str)
 
     ap.add_argument("--packages", default="", type=str, help="Comma-separated packages; empty => auto calls∩db")
+    ap.add_argument("--pkg-list", type=str, default="", 
+                        help="Path to a text file containing package names separated by newlines (e.g., tpl_list.txt).")
     ap.add_argument("--max-packages", type=int, default=0)
 
     ap.add_argument("--min-calls", type=int, default=0)
@@ -859,10 +860,27 @@ def main() -> None:
     calls_by_pkg = load_calls_all(calls_path)
     pkg_dirs = find_package_dirs(db_root)
     db_pkgs = set(pkg_dirs.keys())
-
+    
     if args.packages.strip():
+        # 1순위: 터미널에서 콤마(,)로 직접 입력한 경우
         pkgs = [p.strip() for p in args.packages.split(",") if p.strip() and p.strip() in db_pkgs]
+        
+    elif args.pkg_list.strip():
+        # 2순위: tpl_list.txt 같은 텍스트 파일이 주어진 경우
+        list_file = Path(args.pkg_list.strip())
+        if list_file.exists():
+            with open(list_file, 'r', encoding='utf-8') as f:
+                target_pkgs_from_file = [line.strip() for line in f if line.strip()]
+            
+            # txt file에 적힌 pkg 중에서 실제 db 폴더에도 존재하는 것들만 고르기
+            pkgs = [p for p in target_pkgs_from_file if p in db_pkgs]
+            print(f"[Info] Loaded {len(pkgs)} packages from {list_file.name}")
+        else:
+            print(f"[Error] File not found: {list_file}")
+            pkgs = []
+            
     else:
+        # 3순위: 아무 조건도 없으면 기존처럼 전체 db_root 대상을 정렬해서 실행
         all_candidate_pkgs = list(db_pkgs)
         def sort_key(p):
             count = len(calls_by_pkg.get(p, []))
